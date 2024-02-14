@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -euxo pipefail
 
 readonly NETWORK_CIDR=${1:-"192.168.0.0/23"}
 
@@ -61,6 +61,28 @@ for i in $(seq 0 $HOST_COUNT); do
     echo "Certificate at [${HOST}:${PORT}] expires in [${CERT_EXPIRATION_DAYS}] days ..."
 
     [[ $CERT_EXPIRATION_DAYS -lt $EXPIRATION_THRESHOLD ]] && EXPIRING_CERTS+=("${HOST}:${PORT}")
+
+
+    COMMON_NAME=$(grep -oP 'commonName=\K[^/]+' <<< "${CERT_INFO}" | head -1)
+    ORGANIZATION_NAME=$(grep -oP 'organizationName=\K[^/]+' <<< "${CERT_INFO}" | head -1)
+    STATE_OR_PROVINCE_NAME=$(grep -oP 'stateOrProvinceName=\K[^/]+' <<< "${CERT_INFO}" | head -1)
+    COUNTRY_NAME=$(grep -oP 'countryName=\K[^\\s]+' <<< "${CERT_INFO}" | head -1)
+    SUBJECT_ALTERNATIVE_NAME=$(grep -oP 'Subject Alternative Name: \K[^\\s]+' <<< "${CERT_INFO}" | head -1)
+    ISSUER=$(grep -oP 'Issuer: commonName=\K[^/]+' <<< "${CERT_INFO}" | head -1)
+    
+    jo -p \
+      host="${HOST}" \
+      port="${PORT}" \
+      protocol="${PROTOCOL}" \
+      common_name="${COMMON_NAME}" \
+      organization_name="${ORGANIZATION_NAME}" \
+      state_or_province_name="${STATE_OR_PROVINCE_NAME}" \
+      country_name="${COUNTRY_NAME}" \
+      subject_alternative_name="${SUBJECT_ALTERNATIVE_NAME}" \
+      issuer="${ISSUER}" \
+      not_after="${CERT_NOT_AFTER}" \
+      expiration_days="${CERT_EXPIRATION_DAYS}"
+
 
   done
 done
