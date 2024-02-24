@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 
-set -euxo pipefail
+set -euo pipefail
 
-readonly NETWORK_CIDR=${1:-"192.168.0.0/23"}
+readonly DEFAULT_NETWORK_CIDR="192.168.0.0/23"
+readonly NETWORK_CIDR=${1:-"$DEFAULT_NETWORK_CIDR"}
 
-readonly EXPIRATION_THRESHOLD=30
-readonly EXPIRATION_DATE=$(date -d "+${EXPIRATION_THRESHOLD} days" +%s)
-readonly PORT_RANGE="1-1024"
+readonly DEFAULT_PORT_RANGE=1-1024
+readonly PORT_RANGE=${2:-"$DEFAULT_PORT_RANGE"}
+
+readonly DEFAULT_EXPIRATION_THRESHOLD=30
+readonly EXPIRATION_THRESHOLD=${3:-"${DEFAULT_EXPIRATION_THRESHOLD}"}
+
+function usage {
+  echo "Usage: $0 <network_cidr> <port_range> <expiration_threshold>"
+  echo "  network_cidr:          CIDR notation for the network to scan \
+(default: $NETWORK_CIDR)"
+  echo "  port_range:            Range of ports to scan (default: $PORT_RANGE)"
+  echo "  expiration_threshold:  Number of days before certificate expiration \
+to report (default: $EXPIRATION_THRESHOLD)"
+  exit 1
+}
+
+trap 'usage' ERR
 
 # nmap-formater is a go binary installed with:
 # go install github.com/vdjagilev/nmap-formatter/v2@latest
@@ -21,11 +36,23 @@ jq --version || {
   exit 1
 }
 nmap-formatter --version || {
-  echo "nmap-formatter is not installed, please install nmap-formatter and try again ..."
+  echo "nmap-formatter is not installed, please install nmap-formatter and \
+try again ..."
   exit 1
 }
 
-readonly NMAP_XML_OUTPUT=$(nmap -p ${PORT_RANGE} --open -n -T5 --script ssl-cert -oX - ${NETWORK_CIDR})
+EXPIRATION_DATE=$(date -d "+${EXPIRATION_THRESHOLD} days" +%s)
+readonly EXPIRATION_DATE
+
+NMAP_XML_OUTPUT=$(nmap -p ${PORT_RANGE} \
+                       --open \
+                       -n \
+                       -T5 \
+                       --script ssl-cert \
+                       -oX \
+                       - \
+                       ${NETWORK_CIDR})
+readonly NMAP_XML_OUTPUT
 readonly NMAP_FORMATTED_OUTPUT=$(nmap-formatter json <<< "${NMAP_XML_OUTPUT}")
 
 readonly HOST_COUNT=$(jq '.Host|length' <<< "${NMAP_FORMATTED_OUTPUT}")
@@ -87,7 +114,7 @@ for i in $(seq 0 $HOST_COUNT); do
   done
 done
 
-echo "Found [${#EXPIRING_CERTS[@]}] certificates in the [$NETWORK_CIDR] network which expire within [$EXPIRATION_THRESHOLD] days ..."
+echo "Found [${#EXPIRING_CERTS[@]}] certificates in the [$NETWORK_CIDR] network on port(s) [$PORT_RANGE] which expire within [$EXPIRATION_THRESHOLD] days ..."
 for c in "${EXPIRING_CERTS[@]}"; do
   echo "Expiring certificate: [$c] ..."
 done
